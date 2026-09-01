@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Asistencia interactiva</title>
+<style>
+:root{font-family:Montserrat,system-ui,-apple-system,sans-serif;color:#fff;background:#0f172a}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at top,#334155,#0f172a 65%);display:grid;place-items:center}.app{width:min(1000px,94vw);text-align:center}.top{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:22px;color:#cbd5e1}.progress{font-weight:800}.card{min-height:55vh;border:1px solid #ffffff26;border-radius:32px;background:#ffffff10;backdrop-filter:blur(12px);display:flex;flex-direction:column;justify-content:center;align-items:center;padding:34px;box-shadow:0 24px 80px #0005}.eyebrow{text-transform:uppercase;letter-spacing:.18em;color:#94a3b8;font-size:.8rem;font-weight:800}.name{font-size:clamp(2.6rem,8vw,6.5rem);line-height:1;margin:20px 0 30px}.buttons{display:flex;gap:18px;justify-content:center;flex-wrap:wrap}.btn{border:0;border-radius:18px;padding:18px 30px;color:white;font-size:1.05rem;font-weight:900;cursor:pointer;min-width:190px}.present{background:#16a34a}.absent{background:#dc2626}.hint{margin-top:24px;color:#94a3b8}.summary{display:none}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:28px}.stat{background:#ffffff12;border-radius:22px;padding:25px}.stat strong{display:block;font-size:3rem}.restart{margin-top:25px;background:#2563eb}.setup{margin-bottom:20px;text-align:left;background:#ffffff0b;padding:16px;border-radius:18px}.setup summary{cursor:pointer;font-weight:800}.setup textarea{width:100%;min-height:130px;margin-top:14px;border-radius:12px;padding:12px;background:#0f172a;color:#fff;border:1px solid #475569}.setup button{margin-top:10px;padding:10px 16px;border:0;border-radius:10px;font-weight:800;cursor:pointer}@media(max-width:650px){.stats{grid-template-columns:1fr}.top{font-size:.9rem}.card{min-height:62vh}.btn{width:100%}}
+</style>
+</head>
+<body>
+<main class="app">
+<details class="setup">
+<summary>Editar lista de estudiantes</summary>
+<textarea id="studentInput" aria-label="Lista de estudiantes"></textarea>
+<button id="loadBtn">Cargar lista y comenzar</button>
+</details>
+<section id="attendance">
+<div class="top"><span>Asistencia interactiva</span><span class="progress" id="progress"></span></div>
+<div class="card">
+<div class="eyebrow">¿Está presente?</div>
+<h1 class="name" id="studentName"></h1>
+<div class="buttons"><button class="btn present" id="presentBtn">P · Presente</button><button class="btn absent" id="absentBtn">A · Ausente</button></div>
+<div class="hint">También puedes usar las teclas <b>P</b> y <b>A</b></div>
+</div>
+</section>
+<section class="summary" id="summary">
+<div class="card"><div class="eyebrow">Lista terminada</div><h1>Resumen de asistencia</h1><div class="stats"><div class="stat"><strong id="totalStat">0</strong>Total</div><div class="stat"><strong id="presentStat">0</strong>Presentes</div><div class="stat"><strong id="absentStat">0</strong>Ausentes</div></div><button class="btn restart" id="restartBtn">Pasar lista nuevamente</button></div>
+</section>
+</main>
+<script>
+const defaultStudents=['Estudiante 1','Estudiante 2','Estudiante 3','Estudiante 4','Estudiante 5'];
+let students=JSON.parse(localStorage.getItem('attendanceStudents')||'null')||defaultStudents;
+let index=0,present=0,absent=0,locked=false;
+const $=id=>document.getElementById(id);
+function syncInput(){$('studentInput').value=students.join('\n')}
+function render(){if(index>=students.length)return finish();$('studentName').textContent=students[index];$('progress').textContent=`${index+1} / ${students.length}`;locked=false}
+function mark(status){if(locked||index>=students.length)return;locked=true;if(status==='P')present++;else absent++;index++;setTimeout(render,120)}
+function finish(){$('attendance').style.display='none';$('summary').style.display='block';$('totalStat').textContent=students.length;$('presentStat').textContent=present;$('absentStat').textContent=absent}
+function reset(){index=present=absent=0;$('summary').style.display='none';$('attendance').style.display='block';render()}
+$('presentBtn').onclick=()=>mark('P');$('absentBtn').onclick=()=>mark('A');$('restartBtn').onclick=reset;
+$('loadBtn').onclick=()=>{const list=$('studentInput').value.split('\n').map(x=>x.trim()).filter(Boolean);if(!list.length)return;students=list;localStorage.setItem('attendanceStudents',JSON.stringify(students));document.querySelector('.setup').open=false;reset()};
+document.addEventListener('keydown',e=>{if(e.target.tagName==='TEXTAREA')return;const key=e.key.toUpperCase();if(key==='P'||key==='A')mark(key)});
+syncInput();render();
+</script>
+</body>
+</html>
