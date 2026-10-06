@@ -9,21 +9,94 @@
 <details class="setup" id="setup"><summary>⚙ Configurar curso y puestos</summary><input id="courseInput" placeholder="Nombre del curso"><textarea id="studentInput" placeholder="Un estudiante por línea"></textarea><button class="btn primary" id="saveList">Guardar nómina</button><button class="btn secondary" id="assignBtn">Asignar estudiantes a puestos</button></details>
 <div class="top"><span id="courseTitle">Asistencia interactiva</span><b id="progress"></b></div>
 <div class="stage"><div class="room"><div class="walltop"></div><div class="windows"></div><div class="mural"></div><div class="door"></div><div class="shelf"></div><div class="speaker"></div><div class="board"></div><div class="teacher"></div><div class="altar"></div><div class="seats"><div class="group left" id="left"></div><div class="group middle" id="middle"></div><div class="group right" id="right"></div></div></div>
-<section class="panel" id="panel"><div class="assignPanel" id="assignPanel"><div class="eyebrow">Editor de puestos</div><div class="assignHead"><h2 style="margin:8px 0">Selecciona y toca</h2><span class="assignCount" id="assignCount"></span></div><div class="assignHelp">Selecciona un estudiante, toca la mesa deseada y confirma. Después usa <b>Nueva modificación</b> para realizar otro cambio. Si la mesa está ocupada, ambos estudiantes intercambian puestos.</div><div class="studentList" id="studentList"></div><div class="assignActions"><button class="btn secondary" id="removeSeat">Quitar puesto</button><button class="btn primary" id="confirmSeat">Confirmar puesto</button></div><button class="btn primary" id="newChange" style="margin-top:8px;width:100%">＋ Nueva modificación</button><button class="btn secondary" id="finishAssign" style="margin-top:8px;width:100%">Finalizar distribución</button></div><div id="empty" class="empty"><h2>Configura tu curso</h2><p>La nómina y la ubicación de los estudiantes se guardan solamente en este dispositivo.</p></div><div id="attendance" style="display:none"><div class="eyebrow">¿Está presente?</div><h1 class="name" id="studentName"></h1><div class="buttons"><button class="btn presentBtn" id="presentBtn">P · Presente</button><button class="btn absentBtn" id="absentBtn">A · Ausente</button><button class="btn secondary" id="undoBtn">← Corregir anterior</button></div><div class="hint">El puesto azul indica dónde se sienta · P / A / ←</div></div><div class="summary" id="summary"><div class="eyebrow">Lista terminada</div><h2>Resumen</h2><div class="stats"><div class="stat"><b id="total">0</b>Total</div><div class="stat"><b id="pres">0</b>Presentes</div><div class="stat"><b id="abs">0</b>Ausentes</div></div><div class="abslist" id="abslist"></div><button class="btn primary" id="restart">Pasar lista nuevamente</button></div></section></div>
+<section class="panel" id="panel"><div class="assignPanel" id="assignPanel"><div class="eyebrow">Editor de puestos</div><div class="assignHead"><h2 style="margin:8px 0">Selecciona y toca</h2><span class="assignCount" id="assignCount"></span></div><div class="assignHelp" id="assignHelp">Selecciona un estudiante para modificar su puesto.</div><div class="studentList" id="studentList"></div><div class="assignActions"><button class="btn secondary" id="removeSeat">Quitar puesto</button><button class="btn primary" id="confirmSeat">Confirmar puesto</button></div><button class="btn primary" id="newChange" style="margin-top:8px;width:100%">＋ Nueva modificación</button><button class="btn secondary" id="finishAssign" style="margin-top:8px;width:100%">Finalizar distribución</button></div><div id="empty" class="empty"><h2>Configura tu curso</h2><p>La nómina y la ubicación de los estudiantes se guardan solamente en este dispositivo.</p></div><div id="attendance" style="display:none"><div class="eyebrow">¿Está presente?</div><h1 class="name" id="studentName"></h1><div class="buttons"><button class="btn presentBtn" id="presentBtn">P · Presente</button><button class="btn absentBtn" id="absentBtn">A · Ausente</button><button class="btn secondary" id="undoBtn">← Corregir anterior</button></div><div class="hint">El puesto azul indica dónde se sienta · P / A / ←</div></div><div class="summary" id="summary"><div class="eyebrow">Lista terminada</div><h2>Resumen</h2><div class="stats"><div class="stat"><b id="total">0</b>Total</div><div class="stat"><b id="pres">0</b>Presentes</div><div class="stat"><b id="abs">0</b>Ausentes</div></div><div class="abslist" id="abslist"></div><button class="btn primary" id="restart">Pasar lista nuevamente</button></div></section></div>
 </main><script>
-const $=id=>document.getElementById(id),KEY='attendanceRoomV2';let data=JSON.parse(localStorage.getItem(KEY)||'null')||{course:'',students:[],seatMap:{}};let index=0,history=[],locked=false,assignMode=false,selectedStudent=null,pendingSeat=null;
+const $=id=>document.getElementById(id),KEY='attendanceRoomV2';let data=JSON.parse(localStorage.getItem(KEY)||'null')||{course:'',students:[],seatMap:{}};let index=0,history=[],locked=false,assignMode=false,selectedStudent=null,targetSeat=null,editorState='student';
 const seatIds=[];function makeSeats(id,n){const g=$(id);for(let i=0;i<n;i++){const d=document.createElement('div');d.className='desk';const sid=id+'-'+(i+1);d.dataset.seat=sid;d.title=sid;d.onclick=()=>seatClick(sid);g.appendChild(d);seatIds.push(sid)}}makeSeats('left',10);makeSeats('middle',21);makeSeats('right',14);
 function save(){localStorage.setItem(KEY,JSON.stringify(data))}
 function studentSeat(name){return Object.keys(data.seatMap).find(k=>data.seatMap[k]===name)}
 function shortName(n){const p=n.trim().split(/\s+/);return p.length>1?p[0]+' '+p[1]:n}
-function paint(){document.querySelectorAll('.desk').forEach(d=>{d.className='desk'+(assignMode?' assigning':'');d.innerHTML='';const who=data.seatMap[d.dataset.seat];if(!who)d.classList.add('unassigned');else d.classList.add('assigned');if(assignMode&&who){const l=document.createElement('span');l.className='seat-label';l.textContent=shortName(who);d.appendChild(l);if(who===selectedStudent)d.classList.add('selected-seat');if(d.dataset.seat===pendingSeat)d.classList.add('selected-seat')}if(!assignMode){const h=history.find(x=>x.name===who);if(h)d.classList.add(h.status==='P'?'present':'absent')}});if(!assignMode&&index<data.students.length){const s=studentSeat(data.students[index]);if(s){const d=document.querySelector('[data-seat="'+s+'"]');if(d)d.className='desk active'}}}
+function paint(){document.querySelectorAll('.desk').forEach(d=>{d.className='desk'+(assignMode?' assigning':'');d.innerHTML='';const who=data.seatMap[d.dataset.seat];if(!who)d.classList.add('unassigned');else d.classList.add('assigned');if(assignMode&&who){const l=document.createElement('span');l.className='seat-label';l.textContent=shortName(who);d.appendChild(l);if(who===selectedStudent)d.classList.add('selected-seat');if(d.dataset.seat===targetSeat)d.classList.add('selected-seat')}if(!assignMode){const h=history.find(x=>x.name===who);if(h)d.classList.add(h.status==='P'?'present':'absent')}});if(!assignMode&&index<data.students.length){const s=studentSeat(data.students[index]);if(s){const d=document.querySelector('[data-seat="'+s+'"]');if(d)d.className='desk active'}}}
 function render(){if(assignMode)return renderAssign();paint();$('courseTitle').textContent=(data.course||'Curso')+' · Asistencia';if(!data.students.length){$('empty').style.display='block';$('attendance').style.display='none';$('summary').style.display='none';$('progress').textContent='';return}if(index>=data.students.length)return finish();$('empty').style.display='none';$('attendance').style.display='block';$('summary').style.display='none';$('studentName').textContent=data.students[index];$('progress').textContent=(index+1)+' / '+data.students.length;$('undoBtn').disabled=!history.length;locked=false}
 function mark(status){if(locked||index>=data.students.length)return;locked=true;history.push({name:data.students[index],status});index++;setTimeout(render,100)}function undo(){if(!history.length)return;history.pop();index--;render()}
 function finish(){paint();$('attendance').style.display='none';$('summary').style.display='block';const p=history.filter(x=>x.status==='P'),a=history.filter(x=>x.status==='A');$('total').textContent=data.students.length;$('pres').textContent=p.length;$('abs').textContent=a.length;$('abslist').innerHTML=a.length?'<b>Ausentes:</b><br>'+a.map(x=>'• '+x.name).join('<br>'):'<b>Sin ausentes</b>';$('progress').textContent='Finalizado';locked=false}
-function renderAssign(){paint();$('empty').style.display='none';$('attendance').style.display='none';$('summary').style.display='none';$('assignPanel').style.display='block';$('room').classList.add('editing');const assigned=data.students.filter(n=>studentSeat(n)).length;$('assignCount').textContent=assigned+' / '+data.students.length;$('studentList').innerHTML='';data.students.forEach(n=>{const b=document.createElement('button');b.className='studentItem'+(studentSeat(n)?' done':'')+(n===selectedStudent?' selected':'');b.textContent=(studentSeat(n)?'✓ ':'')+n;b.onclick=()=>{selectedStudent=n;pendingSeat=studentSeat(n)||null;renderAssign();const s=studentSeat(n);if(s)document.querySelector('[data-seat="'+s+'"]').scrollIntoView({behavior:'smooth',block:'center'})};$('studentList').appendChild(b)})}
-function startAssign(){if(!data.students.length)return alert('Primero guarda una nómina.');assignMode=true;selectedStudent=data.students.find(n=>!studentSeat(n))||data.students[0];$('setup').open=false;renderAssign()}
-function seatClick(sid){if(!assignMode||!selectedStudent)return;pendingSeat=sid;renderAssign()}
-function confirmSeat(){if(!selectedStudent||!pendingSeat)return alert('Selecciona un estudiante y luego una mesa.');const oldSeat=studentSeat(selectedStudent),occupant=data.seatMap[pendingSeat];if(oldSeat!==pendingSeat){if(occupant&&oldSeat)data.seatMap[oldSeat]=occupant;else if(occupant)delete data.seatMap[pendingSeat];else if(oldSeat)delete data.seatMap[oldSeat];data.seatMap[pendingSeat]=selectedStudent}save();pendingSeat=null;selectedStudent=null;renderAssign()}
-function stopAssign(){assignMode=false;selectedStudent=null;pendingSeat=null;$('assignPanel').style.display='none';$('room').classList.remove('editing');index=0;history=[];render()}
-$('courseInput').value=data.course;$('studentInput').value=data.students.join('\n');$('saveList').onclick=()=>{const list=$('studentInput').value.split('\n').map(x=>x.trim()).filter(Boolean);if(!list.length)return alert('Agrega estudiantes.');data.course=$('courseInput').value.trim()||'Mi curso';data.students=list;for(const k in data.seatMap)if(!list.includes(data.seatMap[k]))delete data.seatMap[k];save();index=0;history=[];$('setup').open=false;render()};$('assignBtn').onclick=startAssign;$('finishAssign').onclick=stopAssign;$('confirmSeat').onclick=confirmSeat;$('newChange').onclick=()=>{selectedStudent=null;pendingSeat=null;renderAssign();$('studentList').scrollTop=0};$('removeSeat').onclick=()=>{if(!selectedStudent)return;const s=studentSeat(selectedStudent);if(s)delete data.seatMap[s];pendingSeat=null;save();renderAssign()};$('presentBtn').onclick=()=>mark('P');$('absentBtn').onclick=()=>mark('A');$('undoBtn').onclick=undo;$('restart').onclick=()=>{index=0;history=[];render()};document.addEventListener('keydown',e=>{if(['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName))return;if(e.key.toUpperCase()==='P')mark('P');else if(e.key.toUpperCase()==='A')mark('A');else if(e.key==='ArrowLeft')undo()});if(!data.students.length)$('setup').open=true;render();
+function renderAssign(){
+  paint();
+  $('empty').style.display='none';
+  $('attendance').style.display='none';
+  $('summary').style.display='none';
+  $('assignPanel').style.display='block';
+  $('room').classList.add('editing');
+  const assigned=data.students.filter(n=>studentSeat(n)).length;
+  $('assignCount').textContent=assigned+' / '+data.students.length;
+
+  let help='Selecciona un estudiante para modificar su puesto.';
+  if(editorState==='seat'&&selectedStudent) help='<b>'+selectedStudent+'</b> seleccionado. Ahora toca su nuevo puesto.';
+  if(editorState==='confirm'&&selectedStudent&&targetSeat) help='<b>Cambio pendiente:</b> '+selectedStudent+' → '+targetSeat+'. Presiona Confirmar puesto.';
+  if(editorState==='saved') help='✓ Cambio guardado. Presiona <b>Nueva modificación</b> para cambiar otro puesto o <b>Finalizar distribución</b>.';
+  $('assignHelp').innerHTML=help;
+
+  $('studentList').innerHTML='';
+  data.students.forEach(n=>{
+    const b=document.createElement('button');
+    b.className='studentItem'+(studentSeat(n)?' done':'')+(n===selectedStudent?' selected':'');
+    b.textContent=(studentSeat(n)?'✓ ':'')+n;
+    b.disabled=editorState==='confirm'||editorState==='saved';
+    b.onclick=()=>{
+      if(editorState!=='student'&&editorState!=='seat')return;
+      selectedStudent=n;
+      targetSeat=null;
+      editorState='seat';
+      renderAssign();
+    };
+    $('studentList').appendChild(b);
+  });
+
+  $('confirmSeat').disabled=editorState!=='confirm';
+  $('removeSeat').disabled=!selectedStudent||editorState==='saved';
+  $('newChange').disabled=editorState!=='saved';
+}
+function startAssign(){
+  if(!data.students.length)return alert('Primero guarda una nómina.');
+  assignMode=true;
+  selectedStudent=null;
+  targetSeat=null;
+  editorState='student';
+  $('setup').open=false;
+  renderAssign();
+}
+function seatClick(sid){
+  if(!assignMode||editorState!=='seat'||!selectedStudent)return;
+  targetSeat=sid;
+  editorState='confirm';
+  renderAssign();
+}
+function confirmSeat(){
+  if(editorState!=='confirm'||!selectedStudent||!targetSeat)return alert('Selecciona un estudiante y luego una mesa.');
+  const oldSeat=studentSeat(selectedStudent);
+  const occupant=data.seatMap[targetSeat];
+  if(oldSeat!==targetSeat){
+    if(occupant&&oldSeat)data.seatMap[oldSeat]=occupant;
+    else if(occupant)delete data.seatMap[targetSeat];
+    else if(oldSeat)delete data.seatMap[oldSeat];
+    data.seatMap[targetSeat]=selectedStudent;
+  }
+  save();
+  targetSeat=null;
+  selectedStudent=null;
+  editorState='saved';
+  renderAssign();
+}
+function stopAssign(){
+  assignMode=false;
+  selectedStudent=null;
+  targetSeat=null;
+  editorState='student';
+  $('assignPanel').style.display='none';
+  $('room').classList.remove('editing');
+  index=0;
+  history=[];
+  render();
+}
+$('courseInput').value=data.course;$('studentInput').value=data.students.join('\n');$('saveList').onclick=()=>{const list=$('studentInput').value.split('\n').map(x=>x.trim()).filter(Boolean);if(!list.length)return alert('Agrega estudiantes.');data.course=$('courseInput').value.trim()||'Mi curso';data.students=list;for(const k in data.seatMap)if(!list.includes(data.seatMap[k]))delete data.seatMap[k];save();index=0;history=[];$('setup').open=false;render()};$('assignBtn').onclick=startAssign;$('finishAssign').onclick=stopAssign;$('confirmSeat').onclick=confirmSeat;$('newChange').onclick=()=>{selectedStudent=null;targetSeat=null;editorState='student';renderAssign();$('studentList').scrollTop=0};$('removeSeat').onclick=()=>{if(!selectedStudent)return;const s=studentSeat(selectedStudent);if(s)delete data.seatMap[s];targetSeat=null;selectedStudent=null;editorState='saved';save();renderAssign()};$('presentBtn').onclick=()=>mark('P');$('absentBtn').onclick=()=>mark('A');$('undoBtn').onclick=undo;$('restart').onclick=()=>{index=0;history=[];render()};document.addEventListener('keydown',e=>{if(['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName))return;if(e.key.toUpperCase()==='P')mark('P');else if(e.key.toUpperCase()==='A')mark('A');else if(e.key==='ArrowLeft')undo()});if(!data.students.length)$('setup').open=true;render();
 </script></body></html>
