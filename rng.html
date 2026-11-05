@@ -213,7 +213,7 @@ textarea.input{resize:vertical;min-height:210px;line-height:1.5}
     <p class="note">Estas reglas se guardan únicamente en este navegador y no aparecen en el mapa ni en el panel de sorteo. Configúralas antes de proyectar la pantalla.</p>
     <label class="field" for="ruleInput">Una regla por línea, separada por |</label>
     <textarea class="input" id="ruleInput" spellcheck="false" style="min-height:180px" placeholder="FRENTE_CENTRO | Nombre Apellido&#10;SEPARAR | Estudiante A | Estudiante B&#10;JUNTAR | Estudiante C | Estudiante D"></textarea>
-    <p class="note"><strong>FRENTE_CENTRO</strong>: primera fila del bloque central. <strong>SEPARAR</strong>: diferentes bloques y distancia mínima entre puestos. <strong>JUNTAR</strong>: puestos vecinos del mismo bloque (misma fila o fila contigua).</p>
+    <p class="note"><strong>FRENTE_CENTRO</strong>: filas 6 y 7 (las dos inferiores) del bloque central, cercanas a la mesa del profesor. <strong>SEPARAR</strong>: diferentes bloques y distancia mínima entre puestos. <strong>JUNTAR</strong>: puestos vecinos del mismo bloque (misma fila o fila contigua).</p>
     <div class="notice" id="ruleFeedback" aria-live="polite">Las reglas se aplican a los nombres encontrados en la nómina.</div>
     <div class="dialogActions">
       <button type="button" class="btn light" id="checkRules">Verificar nombres</button>
@@ -445,8 +445,9 @@ textarea.input{resize:vertical;min-height:210px;line-height:1.5}
   }
   function meetsRule(rule,map){
     if(rule.kind==='FRENTE_CENTRO'){
+      // El profesor está abajo a la derecha: cerca de él son las filas 6 y 7 del centro.
       const sid=map[rule.names[0]];
-      return !sid||['middle-1','middle-2','middle-3'].includes(sid);
+      return !sid||['middle-16','middle-17','middle-18','middle-19','middle-20','middle-21'].includes(sid);
     }
     const a=map[rule.names[0]],b=map[rule.names[1]];
     if(!a||!b)return true;
