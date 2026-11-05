@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#101d34">
+<title>RNG · Sorteador de puestos</title>
+<style>
+:root{font-family:Montserrat,Inter,system-ui,-apple-system,Segoe UI,sans-serif;color:#142239;background:#f3f5fa}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh}
+button,input,textarea,select{font:inherit}
+button{cursor:pointer}
+.app{max-width:1370px;margin:auto;padding:24px}
+.header{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:24px}
+.brand{display:flex;gap:14px;align-items:center}
+.logo{width:54px;height:54px;display:grid;place-items:center;border-radius:17px;background:#15263f;color:#fff;font-weight:950;font-size:18px;letter-spacing:-.05em}
+h1{margin:0;font-size:clamp(22px,3vw,32px);letter-spacing:-.04em}
+.subtitle{margin:5px 0 0;color:#64748b;font-size:14px}
+.actions{display:flex;gap:9px;flex-wrap:wrap}
+.btn{border:1px solid transparent;border-radius:12px;padding:11px 15px;min-height:42px;font-weight:800;font-size:13px;transition:transform .15s,background .15s}
+.btn:active{transform:scale(.97)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.dark{background:#13233b;color:#fff}
+.btn.blue{background:#225ce0;color:#fff}
+.btn.light{background:#fff;color:#334155;border-color:#dce3ef}
+.btn.red{background:#fff1f2;color:#a52741;border-color:#ffd4dc}
+.btn.full{width:100%}
+.layout{display:grid;grid-template-columns:minmax(0,1.75fr) minmax(290px,.8fr);gap:18px}
+.card{background:white;border:1px solid #e3e9f1;border-radius:20px;box-shadow:0 12px 40px #15263f0a;overflow:hidden}
+.cardpad{padding:20px}
+.maphead{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid #e5eaf0}
+.eyebrow{color:#718096;text-transform:uppercase;letter-spacing:.12em;font-size:11px;font-weight:850}
+h2{font-size:18px;letter-spacing:-.03em;margin:4px 0}
+.small{color:#64748b;font-size:12px;line-height:1.5}
+.roomScroll{overflow:auto;padding:18px;background:#fafbfe}
+.room{position:relative;width:100%;min-width:590px;aspect-ratio:1.38;background:#9a6d4a;border-radius:15px;overflow:hidden;box-shadow:inset 0 0 35px #0002}
+.room:before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(102deg,#fff0 0px,#fff0 38px,#fff1 39px,#0000 41px);pointer-events:none}
+.teacher{position:absolute;right:5%;bottom:4%;width:20%;height:11%;background:#7b4d2d;border:3px solid #5b351f;border-radius:5px;display:grid;place-items:center;font-size:clamp(8px,1vw,12px);font-weight:950;color:#f5dfc9;text-align:center}
+.seats{position:absolute;inset:7% 5% 17% 10%}
+.group{position:absolute;display:grid;gap:3px}
+.left{left:2%;top:2%;width:22%;height:78%;grid-template-columns:repeat(2,1fr);grid-template-rows:repeat(5,1fr);row-gap:7%}
+.middle{left:34%;top:2%;width:34%;height:96%;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(7,1fr);row-gap:3%}
+.right{right:2%;top:2%;width:22%;height:96%;grid-template-columns:repeat(2,1fr);grid-template-rows:repeat(7,1fr);row-gap:3%}
+.desk{position:relative;min-width:0;padding:4px 2px 2px;background:#dfb27b;border:2px solid #875f3d;border-radius:5px;box-shadow:0 3px 5px #0004;aspect-ratio:1.45;display:flex;align-items:center;justify-content:center;text-align:center;white-space:normal;overflow:visible;color:#36271a;transition:background .15s,transform .15s}
+.desk:before{content:"";position:absolute;left:15%;right:15%;top:-10%;height:13%;border-radius:8px 8px 2px 2px;background:#d8ad7c;border:2px solid #875f3d;pointer-events:none}
+.desk:hover{filter:brightness(1.06);z-index:2;transform:translateY(-2px)}
+.desk.occupied{background:#f5ddb9}
+.desk.empty{opacity:.62}
+.desk.fixed{background:#beded0;border-color:#2e7c5f;opacity:1}
+.desk.fixed:after{content:"●";position:absolute;top:0;right:2px;color:#257553;font-size:8px}
+.desk.selected{outline:3px solid #2364e8;z-index:4;box-shadow:0 0 0 5px #dbeafe,0 5px 14px #0003}
+.desk.flash{animation:appear .45s both}
+@keyframes appear{from{filter:brightness(1.5);opacity:.35;transform:scale(.94)}to{filter:brightness(1);opacity:1;transform:scale(1)}}
+.label{display:block;font-size:clamp(7px,.75vw,10px);line-height:1.05;font-weight:950;overflow-wrap:anywhere;max-height:100%;overflow:hidden}
+.num{font-size:11px;color:#785c42;font-weight:700}
+.mapfoot{padding:12px 20px 15px;display:flex;gap:18px;flex-wrap:wrap;color:#637387;font-size:12px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:middle;border:1px solid #0002}
+.dot.occup{background:#f5ddb9}.dot.fix{background:#beded0}.dot.free{background:#dfb27b}
+.panelStack{display:grid;gap:16px;align-content:start}
+.panelTitle{margin-bottom:12px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin:14px 0}
+.stat{padding:10px 8px;background:#f5f7fb;border-radius:12px;text-align:center}
+.stat strong{display:block;font-size:23px;letter-spacing:-.04em}
+.stat span{color:#64748b;font-size:10px;font-weight:700}
+.heroButton{display:flex;align-items:center;justify-content:center;gap:10px;background:#205fdc;color:#fff;border:0;border-radius:15px;padding:16px;width:100%;font-size:17px;font-weight:950;min-height:62px;box-shadow:0 8px 18px #205fdc30}
+.heroButton:disabled{opacity:.45;cursor:not-allowed}
+.helper{font-size:12px;color:#6c788c;margin:10px 0 0;line-height:1.5}
+.selection{background:#f6f8fc;border:1px solid #e1e8f0;border-radius:14px;padding:14px;margin-top:12px}
+.selection strong{display:block;font-size:15px;margin:5px 0}
+.selection label{display:block;font-size:12px;font-weight:750;margin:14px 0 6px}
+.selection select{width:100%;border:1px solid #ccd6e3;border-radius:10px;padding:10px;background:#fff;color:#142239}
+.buttons{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px}
+.tag{display:inline-flex;align-items:center;background:#e8f0ff;color:#1d4ed8;border-radius:20px;font-weight:850;padding:5px 9px;font-size:11px}
+.notice{padding:12px;border-radius:12px;background:#f4f7fd;color:#56657c;font-size:12px;line-height:1.5}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#15263f;color:#fff;border-radius:12px;padding:12px 17px;box-shadow:0 12px 34px #0004;z-index:100;max-width:90vw;text-align:center;font-size:13px;font-weight:750;display:none}
+dialog{border:1px solid #e1e6ef;border-radius:20px;box-shadow:0 35px 100px #101d3466;padding:0;width:min(550px,calc(100vw - 28px));color:#16243b}
+dialog::backdrop{background:#101d3499}
+.dialogTop{padding:20px 22px 13px;border-bottom:1px solid #e9edf4;display:flex;align-items:center;justify-content:space-between}
+.dialogBody{padding:20px 22px 24px}
+.field{display:block;font-weight:800;font-size:12px;margin:14px 0 6px}
+.input{width:100%;background:#f8faff;border:1px solid #d5deeb;border-radius:11px;padding:12px;color:#142239}
+textarea.input{resize:vertical;min-height:210px;line-height:1.5}
+.dialogActions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:16px}
+.note{font-size:12px;color:#64748b;line-height:1.5}
+.note strong{color:#28374d}
+.foot{margin-top:15px;font-size:11px;color:#718096}
+@media(max-width:900px){.layout{grid-template-columns:1fr}.app{padding:14px}.header{align-items:flex-start}.actions{justify-content:flex-end}.cardpad{padding:16px}.roomScroll{padding:12px}}
+@media(max-width:500px){.header{display:block}.actions{justify-content:flex-start;margin-top:15px}.maphead{padding:14px}.stats{gap:6px}.stat strong{font-size:20px}.room{min-width:590px}}
+@media print{@page{size:A4 landscape;margin:9mm}body,.app,.roomScroll{background:white!important}.app{max-width:none;padding:0}.header{margin:0 0 6mm}.logo,.actions,.panelStack,.mapfoot,.foot,.noprint{display:none!important}.layout{display:block}.card{border:0;box-shadow:none}.roomScroll{padding:0;overflow:visible}.room{width:100%;min-width:0;aspect-ratio:1.75;box-shadow:none;print-color-adjust:exact;-webkit-print-color-adjust:exact}.desk,.teacher{print-color-adjust:exact;-webkit-print-color-adjust:exact}.label{font-size:9px}h1{font-size:20px}.subtitle{font-size:12px}.maphead{padding:5px 0;border:0}}
+</style>
+</head>
+<body>
+<main class="app">
+  <header class="header">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">RNG</div>
+      <div><h1>Sorteador de puestos</h1><p class="subtitle" id="courseTitle">Distribución aleatoria de estudiantes</p></div>
+    </div>
+    <div class="actions">
+      <button class="btn light" id="configure">⚙ Configurar</button>
+      <button class="btn light" id="print">Imprimir mapa</button>
+      <button class="btn light" id="export">Exportar CSV</button>
+    </div>
+  </header>
+  <div class="layout">
+    <section class="card" aria-label="Mapa de la sala">
+      <div class="maphead">
+        <div><div class="eyebrow">Plano de la sala</div><h2>45 puestos disponibles</h2></div>
+        <span class="tag" id="mapBadge">Sin sorteo</span>
+      </div>
+      <div class="roomScroll">
+        <div class="room" id="room">
+          <div class="teacher">MESA PROFESOR</div>
+          <div class="seats"><div class="group left" id="left"></div><div class="group middle" id="middle"></div><div class="group right" id="right"></div></div>
+        </div>
+      </div>
+      <div class="mapfoot">
+        <span><i class="dot occup"></i>Asignado</span>
+        <span><i class="dot fix"></i>Puesto fijo</span>
+        <span><i class="dot free"></i>Disponible</span>
+      </div>
+    </section>
+    <aside class="panelStack">
+      <section class="card cardpad">
+        <div class="eyebrow">Distribución del curso</div>
+        <h2 class="panelTitle">Sorteo aleatorio</h2>
+        <div class="stats">
+          <div class="stat"><strong id="countStudents">0</strong><span>Estudiantes</span></div>
+          <div class="stat"><strong id="countAssigned">0</strong><span>Asignados</span></div>
+          <div class="stat"><strong id="countFixed">0</strong><span>Puestos fijos</span></div>
+        </div>
+        <button class="heroButton" id="shuffle">🎲 Aleatorizar puestos</button>
+        <div class="buttons">
+          <button class="btn light" id="undo" disabled>↶ Deshacer</button>
+          <button class="btn light" id="unlock">Quitar todos los fijos</button>
+        </div>
+        <p class="helper">Cada sorteo mantiene a los estudiantes en los puestos fijados y reparte aleatoriamente a los demás.</p>
+      </section>
+      <section class="card cardpad">
+        <div class="eyebrow">Edición de puestos</div>
+        <h2>Selecciona una mesa</h2>
+        <p class="small">Toca un puesto del mapa para consultar el nombre, cambiar de estudiante o dejarlo fijo.</p>
+        <div class="selection" id="selection">
+          <div class="small">Ningún puesto seleccionado</div>
+        </div>
+      </section>
+      <div class="notice">La nómina y los sorteos se guardan solo en este navegador. El sorteador no modifica las asignaciones de tu aplicación de asistencia.</div>
+    </aside>
+  </div>
+  <p class="foot">Mapa original: izquierda 5×2 · centro 7×3 · derecha 7×2 · mesa del profesor abajo a la derecha.</p>
+</main>
+<dialog id="configDialog">
+  <div class="dialogTop"><div><div class="eyebrow">Configuración</div><h2>Curso y estudiantes</h2></div><button class="btn light" id="closeDialog" aria-label="Cerrar configuración">✕</button></div>
+  <div class="dialogBody">
+    <label class="field" for="courseInput">Nombre del curso</label>
+    <input class="input" id="courseInput" placeholder="Ej. 5° Básico A" autocomplete="off">
+    <label class="field" for="studentInput">Nómina (un estudiante por línea)</label>
+    <textarea class="input" id="studentInput" placeholder="Nombre Apellido&#10;Nombre Apellido"></textarea>
+    <p class="note"><strong id="listCounter">0 / 45 estudiantes</strong>. No ingreses nombres repetidos. Al guardar, se conservan los puestos de quienes continúen en la nómina.</p>
+    <div class="dialogActions">
+      <button class="btn light" id="importList" type="button">Importar desde asistencia</button>
+      <button class="btn dark" id="saveConfig" type="button">Guardar nómina</button>
+    </div>
+    <p class="note">La importación funciona únicamente cuando este navegador conserva datos de Asistencia interactiva en el mismo sitio.</p>
+  </div>
+</dialog>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script>
+(function(){
+  'use strict';
+  const $=id=>document.getElementById(id);
+  const KEY='rngRoomV1', ATTENDANCE_KEY='attendanceRoomV2';
+  const ALL=[], deskNodes=new Map();
+  const defaultState=()=>({course:'',students:[],seats:{},locks:[],previous:null});
+  function load(){
+    try{
+      const parsed=JSON.parse(localStorage.getItem(KEY)||'null');
+      if(!parsed||!Array.isArray(parsed.students))return defaultState();
+      return {course:String(parsed.course||''),students:parsed.students.filter(x=>typeof x==='string'),seats:parsed.seats&&typeof parsed.seats==='object'?parsed.seats:{},locks:Array.isArray(parsed.locks)?parsed.locks:[],previous:parsed.previous||null};
+    }catch(e){return defaultState();}
+  }
+  let state=load(),selected=null,flash=false;
+  function store(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){notify('No se pudo guardar en el navegador.');}}
+  function makeSeats(group,count){
+    for(let i=0;i<count;i++){
+      const id=group+'-'+(i+1);
+      const d=document.createElement('button');
+      d.type='button';d.className='desk';d.dataset.seat=id;
+      d.addEventListener('click',()=>{selected=id;render();});
+      $(group).appendChild(d);ALL.push(id);deskNodes.set(id,d);
+    }
+  }
+  makeSeats('left',10);makeSeats('middle',21);makeSeats('right',14);
+  const validIds=new Set(ALL);
+  function clean(){
+    const names=new Set(state.students);
+    const unique=new Set();
+    for(const sid of Object.keys(state.seats)){
+      const name=state.seats[sid];
+      if(!validIds.has(sid)||!names.has(name)||unique.has(name))delete state.seats[sid];
+      else unique.add(name);
+    }
+    state.locks=[...new Set(state.locks)].filter(sid=>validIds.has(sid));
+  }
+  clean();
+  function shortName(name){
+    const parts=name.trim().split(/\s+/);
+    return parts.length===1?parts[0]:parts[0]+' '+parts[parts.length-1].slice(0,1)+'.';
+  }
+  function captionSeat(id){
+    const part=id.split('-');
+    const col=part[0]==='middle'?3:2;
+    const number=Number(part[1]);
+    const zone=part[0]==='left'?'Izquierda':part[0]==='middle'?'Centro':'Derecha';
+    return zone+' · fila '+Math.ceil(number/col)+' · puesto '+((number-1)%col+1);
+  }
+  function findStudent(name){return ALL.find(s=>state.seats[s]===name)||null;}
+  let toastTimer;
+  function notify(message){
+    $('toast').textContent=message;$('toast').style.display='block';
+    clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').style.display='none',2900);
+  }
+  function render(){
+    clean();
+    const assigned=Object.keys(state.seats).length;
+    $('courseTitle').textContent=state.course?state.course+' · distribución de la sala':'Distribución aleatoria de estudiantes';
+    $('countStudents').textContent=state.students.length;
+    $('countAssigned').textContent=assigned;
+    $('countFixed').textContent=state.locks.length;
+    $('shuffle').disabled=!state.students.length;
+    $('undo').disabled=!state.previous;
+    $('unlock').disabled=!state.locks.length;
+    $('export').disabled=!assigned;
+    $('mapBadge').textContent=assigned+' / '+state.students.length+' asignados';
+    ALL.forEach((id,i)=>{
+      const d=deskNodes.get(id),name=state.seats[id],fixed=state.locks.includes(id);
+      d.className='desk'+(name?' occupied':' empty')+(fixed?' fixed':'')+(selected===id?' selected':'')+(flash?' flash':'');
+      if(flash)d.style.animationDelay=((i%7)*40)+'ms';
+      else d.style.animationDelay='';
+      d.replaceChildren();
+      const label=document.createElement('span');label.className=name?'label':'num';
+      label.textContent=name?shortName(name):String(i+1).padStart(2,'0');
+      d.appendChild(label);
+      d.title=captionSeat(id)+' — '+(name||'Vacío')+(fixed?' (fijo)':'');
+      d.setAttribute('aria-label',d.title);
+    });
+    flash=false;
+    renderSelection();
+  }
+  function renderSelection(){
+    const box=$('selection');box.replaceChildren();
+    if(!selected){
+      const hint=document.createElement('div');hint.className='small';hint.textContent='Ningún puesto seleccionado';box.appendChild(hint);return;
+    }
+    const name=state.seats[selected],fixed=state.locks.includes(selected);
+    const location=document.createElement('div');location.className='eyebrow';location.textContent=captionSeat(selected);
+    const title=document.createElement('strong');title.textContent=name||'Puesto vacío';
+    box.append(location,title);
+    const label=document.createElement('label');label.htmlFor='studentSelect';label.textContent='Asignar manualmente';
+    const select=document.createElement('select');select.id='studentSelect';
+    const blank=document.createElement('option');blank.value='';blank.textContent='— Dejar vacío —';select.appendChild(blank);
+    state.students.forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;select.appendChild(o);});
+    select.value=name||'';
+    box.append(label,select);
+    const buttons=document.createElement('div');buttons.className='buttons';
+    const move=document.createElement('button');move.className='btn blue';move.textContent='Aplicar cambio';
+    move.onclick=()=>assignManual(select.value);
+    const lock=document.createElement('button');lock.className='btn '+(fixed?'red':'light');
+    lock.textContent=fixed?'🔓 Liberar puesto':'🔒 Fijar puesto';lock.onclick=toggleFixed;
+    buttons.append(move,lock);box.appendChild(buttons);
+    if(fixed){const n=document.createElement('p');n.className='helper';n.textContent='Este puesto queda intacto en los próximos sorteos. Para cambiar su ocupante, primero libéralo.';box.appendChild(n);}
+  }
+  function snapshot(){state.previous={seats:{...state.seats},locks:[...state.locks]};}
+  function randomIndex(max){
+    if(max<=1)return 0;
+    if(typeof crypto==='undefined'||!crypto.getRandomValues)return Math.floor(Math.random()*max);
+    const range=4294967296,limit=Math.floor(range/max)*max,a=new Uint32Array(1);
+    do{crypto.getRandomValues(a);}while(a[0]>=limit);
+    return a[0]%max;
+  }
+  function shuffleArray(arr){
+    const result=arr.slice();
+    for(let i=result.length-1;i>0;i--){const j=randomIndex(i+1),tmp=result[i];result[i]=result[j];result[j]=tmp;}
+    return result;
+  }
+  function randomize(){
+    if(!state.students.length){openConfig();return;}
+    clean();
+    const fixedSet=new Set(state.locks);
+    const fixedNames=new Set(ALL.filter(s=>fixedSet.has(s)&&state.seats[s]).map(s=>state.seats[s]));
+    const candidates=shuffleArray(state.students.filter(n=>!fixedNames.has(n)));
+    const seats=shuffleArray(ALL.filter(s=>!fixedSet.has(s)));
+    if(candidates.length>seats.length){notify('Hay más estudiantes que puestos disponibles. Libera algunos puestos.');return;}
+    snapshot();
+    const next={};
+    for(const sid of state.locks)if(state.seats[sid])next[sid]=state.seats[sid];
+    candidates.forEach((name,i)=>next[seats[i]]=name);
+    state.seats=next;store();flash=true;render();notify('¡Sorteo realizado! '+state.students.length+' estudiantes distribuidos.');
+  }
+  function assignManual(newName){
+    if(!selected)return;
+    if(state.locks.includes(selected)){notify('Libera este puesto antes de modificarlo.');return;}
+    const oldName=state.seats[selected]||'';
+    if(oldName===newName){notify('Este estudiante ya ocupa el puesto.');return;}
+    const origin=newName?findStudent(newName):null;
+    if(origin&&state.locks.includes(origin)){notify('Primero libera el puesto fijo del estudiante seleccionado.');return;}
+    snapshot();
+    if(origin){if(oldName)state.seats[origin]=oldName;else delete state.seats[origin];}
+    if(newName)state.seats[selected]=newName;else delete state.seats[selected];
+    store();render();notify('Puesto actualizado.');
+  }
+  function toggleFixed(){
+    if(!selected)return;
+    snapshot();
+    if(state.locks.includes(selected))state.locks=state.locks.filter(s=>s!==selected);
+    else state.locks.push(selected);
+    store();render();notify(state.locks.includes(selected)?'Puesto fijado.':'Puesto liberado.');
+  }
+  function unlockAll(){
+    if(!state.locks.length)return;
+    snapshot();state.locks=[];store();render();notify('Todos los puestos han sido liberados.');
+  }
+  function undo(){
+    if(!state.previous)return;
+    const previous=state.previous;state.seats={...previous.seats};state.locks=[...previous.locks];state.previous=null;
+    store();render();notify('Se restauró la distribución anterior.');
+  }
+  function normalize(raw){
+    const items=raw.split(/\r?\n/).map(s=>s.trim().replace(/\s+/g,' ')).filter(Boolean);
+    const seen=new Set(),duplicates=[];
+    for(const name of items){const low=name.toLocaleLowerCase('es');if(seen.has(low))duplicates.push(name);seen.add(low);}
+    return {items,duplicates};
+  }
+  function counter(){
+    const n=normalize($('studentInput').value).items.length;
+    $('listCounter').textContent=n+' / 45 estudiantes';
+    $('listCounter').style.color=n>45?'#d2314f':'#28374d';
+  }
+  function openConfig(){
+    $('courseInput').value=state.course;
+    $('studentInput').value=state.students.join('\n');counter();
+    const dialog=$('configDialog');if(!dialog.open)dialog.showModal();
+  }
+  function saveConfig(){
+    const {items,duplicates}=normalize($('studentInput').value);
+    if(!items.length){notify('Ingresa al menos un estudiante.');return;}
+    if(items.length>ALL.length){notify('El mapa permite hasta 45 estudiantes.');return;}
+    if(duplicates.length){notify('Nombre duplicado: '+duplicates[0]);return;}
+    snapshot();
+    state.course=$('courseInput').value.trim()||'Mi curso';
+    state.students=items;
+    clean();store();render();$('configDialog').close();
+    notify('Nómina guardada: '+items.length+' estudiantes.');
+  }
+  function importList(){
+    let source;
+    try{source=JSON.parse(localStorage.getItem(ATTENDANCE_KEY)||'null');}catch(e){}
+    if(!source||!Array.isArray(source.students)||!source.students.length){notify('No hay una nómina de asistencia guardada en este navegador.');return;}
+    $('courseInput').value=source.course||'';
+    $('studentInput').value=source.students.join('\n');counter();
+    notify('Nómina importada. Pulsa Guardar nómina para usarla.');
+  }
+  function exportCSV(){
+    if(!Object.keys(state.seats).length)return;
+    const rows=[['Sector','Fila','Puesto','Estudiante','Fijo']];
+    ALL.forEach(id=>{
+      const parts=id.split('-'),n=Number(parts[1]),cols=parts[0]==='middle'?3:2;
+      rows.push([parts[0]==='left'?'Izquierda':parts[0]==='middle'?'Centro':'Derecha',Math.ceil(n/cols),(n-1)%cols+1,state.seats[id]||'',state.locks.includes(id)?'Sí':'No']);
+    });
+    const csv='\ufeff'+rows.map(row=>row.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(';')).join('\r\n');
+    const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
+    const a=document.createElement('a');a.href=url;a.download='puestos_'+(state.course||'curso').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_')+'.csv';
+    document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
+  }
+  $('shuffle').onclick=randomize;
+  $('configure').onclick=openConfig;
+  $('saveConfig').onclick=saveConfig;
+  $('closeDialog').onclick=()=>$('configDialog').close();
+  $('importList').onclick=importList;
+  $('studentInput').addEventListener('input',counter);
+  $('undo').onclick=undo;
+  $('unlock').onclick=unlockAll;
+  $('print').onclick=()=>window.print();
+  $('export').onclick=exportCSV;
+  document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'&&!$('configDialog').open){e.preventDefault();randomize();}});
+  render();
+  if(!state.students.length)openConfig();
+})();
+</script>
+</body>
+</html>
