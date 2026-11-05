@@ -124,7 +124,7 @@ textarea.input{resize:vertical;min-height:210px;line-height:1.5}
 @media print{@page{size:A4 landscape;margin:9mm}body,.app,.roomScroll{background:white!important}.app{max-width:none;padding:0}.header{margin:0 0 6mm}.logo,.actions,.panelStack,.mapfoot,.foot,.noprint{display:none!important}.layout{display:block}.card{border:0;box-shadow:none}.roomScroll{padding:0;overflow:visible}.room{width:100%;min-width:0;aspect-ratio:1.75;box-shadow:none;print-color-adjust:exact;-webkit-print-color-adjust:exact}.desk,.teacher{print-color-adjust:exact;-webkit-print-color-adjust:exact}.label{font-size:9px}h1{font-size:20px}.subtitle{font-size:12px}.maphead{padding:5px 0;border:0}}
 
 /* La pantalla pública no ofrece enlaces ni indicaciones para abrir las reglas docentes. */
-#configure{touch-action:manipulation;-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}
+#test01{touch-action:manipulation;-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}
 #teacherDialog .notice{margin-top:12px;white-space:pre-line}
 #teacherDialog textarea{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px}
 @media print{#teacherDialog{display:none!important}}
@@ -204,6 +204,7 @@ textarea.input{resize:vertical;min-height:210px;line-height:1.5}
       <button class="btn dark" id="saveConfig" type="button">Guardar nómina</button>
     </div>
     <p class="note">La importación funciona únicamente cuando este navegador conserva datos de Asistencia interactiva en el mismo sitio.</p>
+    <div style="margin-top:14px"><button class="btn light" id="test01" type="button">Prueba 01</button></div>
   </div>
 </dialog>
 <dialog id="teacherDialog">
@@ -218,7 +219,7 @@ textarea.input{resize:vertical;min-height:210px;line-height:1.5}
       <button type="button" class="btn light" id="checkRules">Verificar nombres</button>
       <button type="button" class="btn dark" id="saveRules">Guardar reglas</button>
     </div>
-    <p class="note">Acceso docente: Ctrl + Alt + M en computador, o mantener presionado el botón Configurar durante 1,5 segundos en celular. No es una contraseña ni un sistema de cifrado.</p>
+    <p class="note">La secuencia de acceso oculta este menú de la vista habitual, pero no equivale a una contraseña ni cifra la información.</p>
   </div>
 </dialog>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -698,30 +699,17 @@ textarea.input{resize:vertical;min-height:210px;line-height:1.5}
     document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
   }
   $('shuffle').onclick=randomize;
-  const configButton=$('configure');
-  let configHoldTimer=null;
-  let suppressConfigClickUntil=0;
-  // Toque normal: configuración del curso. Pulsación prolongada: reglas privadas.
-  configButton.addEventListener('click',event=>{
-    if(Date.now()<suppressConfigClickUntil){
-      event.preventDefault();
-      return;
-    }
-    openConfig();
-  });
-  configButton.addEventListener('pointerdown',event=>{
-    if(configButton.disabled||!['touch','pen'].includes(event.pointerType))return;
-    clearTimeout(configHoldTimer);
-    configHoldTimer=setTimeout(()=>{
-      configHoldTimer=null;
-      suppressConfigClickUntil=Date.now()+1800;
+  $('configure').onclick=openConfig;
+  // Solo la séptima pulsación consecutiva de Prueba 01 abre el panel privado.
+  let test01Presses=0;
+  $('test01').addEventListener('click',()=>{
+    test01Presses++;
+    if(test01Presses===7){
+      test01Presses=0;
       openTeacher();
-    },1500);
+    }
   });
-  ['pointerup','pointerleave','pointercancel'].forEach(type=>{
-    configButton.addEventListener(type,()=>clearTimeout(configHoldTimer));
-  });
-  configButton.addEventListener('contextmenu',event=>event.preventDefault());
+  $('configDialog').addEventListener('close',()=>{test01Presses=0;});
   $('saveConfig').onclick=saveConfig;
   $('closeDialog').onclick=()=>$('configDialog').close();
   $('importList').onclick=importList;
@@ -735,10 +723,7 @@ textarea.input{resize:vertical;min-height:210px;line-height:1.5}
   $('saveRules').onclick=saveTeacher;
   $('checkRules').onclick=updateTeacherStatus;
   $('ruleInput').addEventListener('input',updateTeacherStatus);
-  document.addEventListener('keydown',e=>{
-    if(e.ctrlKey&&e.altKey&&e.code==='KeyM'){e.preventDefault();openTeacher();}
-  });
-  // En móviles el acceso oculto se abre exclusivamente desde el botón Configurar.
+  // La configuración docente solo se abre desde Prueba 01 dentro de Configurar.
   render();
   if(!state.students.length)openConfig();
 })();
