@@ -50,8 +50,35 @@ h2{font-size:18px;letter-spacing:-.03em;margin:4px 0}
 .desk.fixed{background:#beded0;border-color:#2e7c5f;opacity:1}
 .desk.fixed:after{content:"●";position:absolute;top:0;right:2px;color:#257553;font-size:8px}
 .desk.selected{outline:3px solid #2364e8;z-index:4;box-shadow:0 0 0 5px #dbeafe,0 5px 14px #0003}
-.desk.flash{animation:appear .45s both}
-@keyframes appear{from{filter:brightness(1.5);opacity:.35;transform:scale(.94)}to{filter:brightness(1);opacity:1;transform:scale(1)}}
+.desk.flash{animation:seatReveal .88s cubic-bezier(.18,.8,.2,1.12) both;z-index:3}
+@keyframes seatReveal{
+  0%{transform:scale(.85);filter:brightness(1.55)}
+  22%{transform:scale(1.28);filter:brightness(1.25)}
+  47%{transform:scale(.91)}
+  70%{transform:scale(1.11)}
+  100%{transform:scale(1);filter:brightness(1)}
+}
+@keyframes seatHeartbeat{
+  0%,18%,100%{transform:scale(1);filter:brightness(1)}
+  30%{transform:scale(1.10);filter:brightness(1.18)}
+  44%{transform:scale(.98)}
+  61%{transform:scale(1.065);filter:brightness(1.10)}
+  73%{transform:scale(1)}
+}
+@keyframes seatHeartbeatFixed{
+  0%,100%{transform:scale(1)}
+  50%{transform:scale(1.035)}
+}
+.room.is-shuffling .desk{animation:seatHeartbeat .72s ease-in-out infinite!important;pointer-events:none;z-index:2}
+.room.is-shuffling .desk:nth-child(3n+2){animation-delay:-.2s!important}
+.room.is-shuffling .desk:nth-child(4n+1){animation-delay:-.38s!important}
+.room.is-shuffling .desk.fixed{animation:seatHeartbeatFixed 1s ease-in-out infinite!important;z-index:1}
+.room.is-shuffling .desk:hover{transform:none}
+.confettiCanvas{position:absolute;inset:0;width:100%;height:100%;z-index:12;pointer-events:none}
+@media(prefers-reduced-motion:reduce){
+  .room.is-shuffling .desk,.room.is-shuffling .desk.fixed,.desk.flash{animation:none!important;transition:none!important}
+}
+@media print{.confettiCanvas{display:none!important}}
 .label{display:block;font-size:clamp(7px,.75vw,10px);line-height:1.05;font-weight:950;overflow-wrap:anywhere;max-height:100%;overflow:hidden}
 .num{font-size:11px;color:#785c42;font-weight:700}
 .mapfoot{padding:12px 20px 15px;display:flex;gap:18px;flex-wrap:wrap;color:#637387;font-size:12px}
@@ -112,12 +139,13 @@ textarea.input{resize:vertical;min-height:210px;line-height:1.5}
     <section class="card" aria-label="Mapa de la sala">
       <div class="maphead">
         <div><div class="eyebrow">Plano de la sala</div><h2>45 puestos disponibles</h2></div>
-        <span class="tag" id="mapBadge">Sin sorteo</span>
+        <span class="tag" id="mapBadge" role="status" aria-live="polite">Sin sorteo</span>
       </div>
       <div class="roomScroll">
         <div class="room" id="room">
           <div class="teacher">MESA PROFESOR</div>
           <div class="seats"><div class="group left" id="left"></div><div class="group middle" id="middle"></div><div class="group right" id="right"></div></div>
+          <canvas id="confetti" class="confettiCanvas" aria-hidden="true"></canvas>
         </div>
       </div>
       <div class="mapfoot">
@@ -140,7 +168,7 @@ textarea.input{resize:vertical;min-height:210px;line-height:1.5}
           <button class="btn light" id="undo" disabled>↶ Deshacer</button>
           <button class="btn light" id="unlock">Quitar todos los fijos</button>
         </div>
-        <p class="helper">Cada sorteo mantiene a los estudiantes en los puestos fijados y reparte aleatoriamente a los demás.</p>
+<p class="helper">Los nombres se mezclarán durante 5 segundos antes de revelar la distribución final. Los puestos fijados no cambian.</p>
       </section>
       <section class="card cardpad">
         <div class="eyebrow">Edición de puestos</div>
@@ -200,14 +228,14 @@ textarea.input{resize:vertical;min-height:210px;line-height:1.5}
       return {course:String(parsed.course||''),students:parsed.students.filter(x=>typeof x==='string'),seats:parsed.seats&&typeof parsed.seats==='object'?parsed.seats:{},locks:Array.isArray(parsed.locks)?parsed.locks:[],previous:parsed.previous||null};
     }catch(e){return defaultState();}
   }
-  let state=load(),selected=null,flash=false;
+  let state=load(),selected=null,flash=false,isShuffling=false;
   function store(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){notify('No se pudo guardar en el navegador.');}}
   function makeSeats(group,count){
     for(let i=0;i<count;i++){
       const id=group+'-'+(i+1);
       const d=document.createElement('button');
       d.type='button';d.className='desk';d.dataset.seat=id;
-      d.addEventListener('click',()=>{selected=id;render();});
+      d.addEventListener('click',()=>{if(isShuffling)return;selected=id;render();});
       $(group).appendChild(d);ALL.push(id);deskNodes.set(id,d);
     }
   }
@@ -248,13 +276,18 @@ textarea.input{resize:vertical;min-height:210px;line-height:1.5}
     $('countStudents').textContent=state.students.length;
     $('countAssigned').textContent=assigned;
     $('countFixed').textContent=state.locks.length;
-    $('shuffle').disabled=!state.students.length;
-    $('undo').disabled=!state.previous;
-    $('unlock').disabled=!state.locks.length;
-    $('export').disabled=!assigned;
-    $('mapBadge').textContent=assigned+' / '+state.students.length+' asignados';
+    $('shuffle').disabled=isShuffling||!state.students.length;
+    $('undo').disabled=isShuffling||!state.previous;
+    $('unlock').disabled=isShuffling||!state.locks.length;
+    $('configure').disabled=isShuffling;
+    $('print').disabled=isShuffling;
+    $('export').disabled=isShuffling||!assigned;
+    $('room').classList.toggle('is-shuffling',isShuffling);
+    $('room').setAttribute('aria-busy',isShuffling?'true':'false');
+    $('mapBadge').textContent=isShuffling?'Sorteando…':assigned+' / '+state.students.length+' asignados';
     ALL.forEach((id,i)=>{
       const d=deskNodes.get(id),name=state.seats[id],fixed=state.locks.includes(id);
+      d.disabled=isShuffling;
       d.className='desk'+(name?' occupied':' empty')+(fixed?' fixed':'')+(selected===id?' selected':'')+(flash?' flash':'');
       if(flash)d.style.animationDelay=((i%7)*40)+'ms';
       else d.style.animationDelay='';
@@ -270,6 +303,10 @@ textarea.input{resize:vertical;min-height:210px;line-height:1.5}
   }
   function renderSelection(){
     const box=$('selection');box.replaceChildren();
+    if(isShuffling){
+      const hint=document.createElement('div');hint.className='small';
+      hint.textContent='🎲 Mezclando puestos…';box.appendChild(hint);return;
+    }
     if(!selected){
       const hint=document.createElement('div');hint.className='small';hint.textContent='Ningún puesto seleccionado';box.appendChild(hint);return;
     }
@@ -466,14 +503,116 @@ textarea.input{resize:vertical;min-height:210px;line-height:1.5}
     remainingStudents.forEach((name,i)=>result[remainingSeats[i]]=name);
     return result;
   }
+
+  const SHUFFLE_DURATION=5000;
+  const prefersReducedMotion=()=>window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // La vista previa solo cambia el texto que se ve; nunca modifica la distribución guardada.
+  function paintShufflePreview(variableNames,freeSeats){
+    const candidates=shuffleArray(variableNames);
+    const positions=shuffleArray(freeSeats);
+    const preview=new Map();
+    candidates.forEach((name,i)=>preview.set(positions[i],name));
+    freeSeats.forEach((sid)=>{
+      const d=deskNodes.get(sid),name=preview.get(sid)||'';
+      const label=d.firstElementChild;
+      if(!label)return;
+      label.className=name?'label':'num';
+      label.textContent=name?shortName(name):'•';
+      d.classList.toggle('occupied',Boolean(name));
+      d.classList.toggle('empty',!name);
+    });
+  }
+  // Confeti original de píxeles, con colores vivos y pequeñas monedas de estilo arcade.
+  function burstPixelConfetti(){
+    if(prefersReducedMotion())return;
+    const canvas=$('confetti'),rect=$('room').getBoundingClientRect();
+    if(!rect.width||!rect.height)return;
+    const pixelRatio=Math.min(window.devicePixelRatio||1,2),w=rect.width,h=rect.height;
+    canvas.width=Math.ceil(w*pixelRatio);canvas.height=Math.ceil(h*pixelRatio);
+    const ctx=canvas.getContext('2d');
+    if(!ctx)return;
+    ctx.setTransform(pixelRatio,0,0,pixelRatio,0,0);
+    const palette=['#ffe34d','#ff5b61','#58d3ff','#58e0a2','#b18cff','#ffffff','#ff9a3d'];
+    const random=(min,max)=>min+Math.random()*(max-min);
+    const particles=Array.from({length:145},()=>({
+      x:random(w*.12,w*.88),
+      y:random(h*.15,h*.65),
+      vx:random(-3.7,3.7),
+      vy:random(-8.5,-2.2),
+      size:random(4,9),
+      rotation:random(0,Math.PI*2),
+      spin:random(-.12,.12),
+      color:palette[Math.floor(Math.random()*palette.length)],
+      type:Math.random()<.19?'coin':Math.random()<.35?'cross':'pixel'
+    }));
+    const duration=2050;let began=0,previous=0;
+    function frame(now){
+      if(!began){began=now;previous=now;}
+      const elapsed=now-began,delta=Math.min((now-previous)/16.67,2.5);previous=now;
+      ctx.clearRect(0,0,w,h);
+      const opacity=Math.min(1,(duration-elapsed)/450);
+      ctx.globalAlpha=Math.max(0,opacity);
+      particles.forEach(p=>{
+        p.x+=p.vx*delta;p.y+=p.vy*delta;p.vy+=.19*delta;p.rotation+=p.spin*delta;
+        ctx.save();ctx.translate(Math.round(p.x),Math.round(p.y));ctx.rotate(p.rotation);
+        const s=Math.max(3,Math.round(p.size));
+        if(p.type==='coin'){
+          ctx.fillStyle='#ce821f';ctx.fillRect(-s/2-1,-s/2-1,s+2,s+2);
+          ctx.fillStyle='#ffe34d';ctx.fillRect(-s/2,-s/2,s,s);
+          ctx.fillStyle='#fff6a6';ctx.fillRect(-1,-s/2+2,2,Math.max(2,s-4));
+        }else if(p.type==='cross'){
+          ctx.fillStyle=p.color;
+          ctx.fillRect(-s/2,-s*1.1/2,s,s*1.1);
+          ctx.fillRect(-s*1.1/2,-s/2,s*1.1,s);
+        }else{
+          ctx.fillStyle=p.color;ctx.fillRect(-s/2,-s/2,s,s);
+        }
+        ctx.restore();
+      });
+      ctx.globalAlpha=1;
+      if(elapsed<duration)requestAnimationFrame(frame);
+      else ctx.clearRect(0,0,canvas.width,canvas.height);
+    }
+    requestAnimationFrame(frame);
+  }
   function randomize(){
+    if(isShuffling)return;
     if(!state.students.length){openConfig();return;}
     clean();
+    // Resolver primero el resultado válido para que la animación no termine en un sorteo imposible.
     let next;
     try{next=computeConstrainedSeats();}
     catch(e){notify(e.message+' Revísalo en la configuración docente.');return;}
-    snapshot();state.seats=next;store();flash=true;render();
-    notify('¡Sorteo realizado! '+state.students.length+' estudiantes distribuidos.');
+    const lockedNames=new Set(ALL.filter(sid=>state.locks.includes(sid)&&state.seats[sid]).map(sid=>state.seats[sid]));
+    const variableNames=state.students.filter(name=>!lockedNames.has(name));
+    const freeSeats=ALL.filter(sid=>!state.locks.includes(sid));
+    if(!variableNames.length){notify('Todos los estudiantes están fijados. Libera algún puesto para sortear.');return;}
+    selected=null;
+    isShuffling=true;render();
+    function finish(){
+      snapshot();state.seats=next;store();
+      isShuffling=false;flash=!prefersReducedMotion();render();
+      burstPixelConfetti();
+      notify('¡Sorteo realizado! '+state.students.length+' estudiantes distribuidos.');
+    }
+    if(prefersReducedMotion()){finish();return;}
+    const start=performance.now();let lastPreview=-Infinity,lastSecond=-1;
+    function step(now){
+      const elapsed=now-start;
+      if(elapsed>=SHUFFLE_DURATION){finish();return;}
+      const progress=elapsed/SHUFFLE_DURATION;
+      const interval=85+Math.pow(progress,3)*190;
+      if(now-lastPreview>=interval){
+        paintShufflePreview(variableNames,freeSeats);lastPreview=now;
+      }
+      const seconds=Math.ceil((SHUFFLE_DURATION-elapsed)/1000);
+      if(seconds!==lastSecond){
+        $('mapBadge').textContent='Sorteando · '+seconds+' s';
+        lastSecond=seconds;
+      }
+      requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
   }
   function assignManual(newName){
     if(!selected)return;
