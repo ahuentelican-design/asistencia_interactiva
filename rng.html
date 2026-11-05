@@ -88,6 +88,11 @@ textarea.input{resize:vertical;min-height:210px;line-height:1.5}
 @media(max-width:900px){.layout{grid-template-columns:1fr}.app{padding:14px}.header{align-items:flex-start}.actions{justify-content:flex-end}.cardpad{padding:16px}.roomScroll{padding:12px}}
 @media(max-width:500px){.header{display:block}.actions{justify-content:flex-start;margin-top:15px}.maphead{padding:14px}.stats{gap:6px}.stat strong{font-size:20px}.room{min-width:590px}}
 @media print{@page{size:A4 landscape;margin:9mm}body,.app,.roomScroll{background:white!important}.app{max-width:none;padding:0}.header{margin:0 0 6mm}.logo,.actions,.panelStack,.mapfoot,.foot,.noprint{display:none!important}.layout{display:block}.card{border:0;box-shadow:none}.roomScroll{padding:0;overflow:visible}.room{width:100%;min-width:0;aspect-ratio:1.75;box-shadow:none;print-color-adjust:exact;-webkit-print-color-adjust:exact}.desk,.teacher{print-color-adjust:exact;-webkit-print-color-adjust:exact}.label{font-size:9px}h1{font-size:20px}.subtitle{font-size:12px}.maphead{padding:5px 0;border:0}}
+
+/* La pantalla pública no ofrece enlaces ni indicaciones para abrir las reglas docentes. */
+#teacherDialog .notice{margin-top:12px;white-space:pre-line}
+#teacherDialog textarea{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px}
+@media print{#teacherDialog{display:none!important}}
 </style>
 </head>
 <body>
@@ -163,6 +168,21 @@ textarea.input{resize:vertical;min-height:210px;line-height:1.5}
       <button class="btn dark" id="saveConfig" type="button">Guardar nómina</button>
     </div>
     <p class="note">La importación funciona únicamente cuando este navegador conserva datos de Asistencia interactiva en el mismo sitio.</p>
+  </div>
+</dialog>
+<dialog id="teacherDialog">
+  <div class="dialogTop"><div><div class="eyebrow">Acceso docente</div><h2>Reglas privadas de distribución</h2></div><button class="btn light" id="closeTeacher" aria-label="Cerrar reglas">✕</button></div>
+  <div class="dialogBody">
+    <p class="note">Estas reglas se guardan únicamente en este navegador y no aparecen en el mapa ni en el panel de sorteo. Configúralas antes de proyectar la pantalla.</p>
+    <label class="field" for="ruleInput">Una regla por línea, separada por |</label>
+    <textarea class="input" id="ruleInput" spellcheck="false" style="min-height:180px" placeholder="FRENTE_CENTRO | Nombre Apellido&#10;SEPARAR | Estudiante A | Estudiante B&#10;JUNTAR | Estudiante C | Estudiante D"></textarea>
+    <p class="note"><strong>FRENTE_CENTRO</strong>: primera fila del bloque central. <strong>SEPARAR</strong>: diferentes bloques y distancia mínima entre puestos. <strong>JUNTAR</strong>: puestos vecinos del mismo bloque (misma fila o fila contigua).</p>
+    <div class="notice" id="ruleFeedback" aria-live="polite">Las reglas se aplican a los nombres encontrados en la nómina.</div>
+    <div class="dialogActions">
+      <button type="button" class="btn light" id="checkRules">Verificar nombres</button>
+      <button type="button" class="btn dark" id="saveRules">Guardar reglas</button>
+    </div>
+    <p class="note">Acceso docente: Ctrl + Alt + M en computador, o mantener presionado el logo RNG durante 2 segundos en celular. No es una contraseña ni un sistema de cifrado.</p>
   </div>
 </dialog>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -284,19 +304,176 @@ textarea.input{resize:vertical;min-height:210px;line-height:1.5}
     for(let i=result.length-1;i>0;i--){const j=randomIndex(i+1),tmp=result[i];result[i]=result[j];result[j]=tmp;}
     return result;
   }
+
+  // Las reglas contienen nombres de menores de edad: nunca se incluyen en el HTML público.
+  // Permanecen en localStorage del navegador que realiza el sorteo.
+  const PRIVATE_RULES_KEY='rngRoomTeacherRulesV1';
+  let teacherRulesText='';
+  try{teacherRulesText=localStorage.getItem(PRIVATE_RULES_KEY)||'';}catch(e){}
+  function canonicalName(name){
+    return String(name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('es').replace(/[^a-z0-9]+/g,' ').trim();
+  }
+  function closeEnough(a,b){
+    if(a===b)return true;
+    if(Math.abs(a.length-b.length)>1)return false;
+    let i=0,j=0,edits=0;
+    while(i<a.length&&j<b.length){
+      if(a[i]===b[j]){i++;j++;continue;}
+      if(++edits>1)return false;
+      if(a.length>b.length)i++;
+      else if(a.length<b.length)j++;
+      else{i++;j++;}
+    }
+    return edits+(a.length-i)+(b.length-j)<=1;
+  }
+  function studentMatch(name){
+    const wanted=canonicalName(name);
+    const exact=state.students.filter(n=>canonicalName(n)===wanted);
+    if(exact.length===1)return exact[0];
+    const parts=wanted.split(' ').filter(Boolean);
+    if(parts.length<2)return null;
+    const candidates=state.students.filter(n=>{
+      const tokens=canonicalName(n).split(' ').filter(Boolean);
+      return tokens[0]===parts[0]&&parts.slice(1).some(part=>tokens.slice(1).some(token=>closeEnough(token,part)));
+    });
+    return candidates.length===1?candidates[0]:null;
+  }
+  function parsedRules(textValue){
+    const rules=[],errors=[];
+    String(textValue).split(/\r?\n/).forEach((line,idx)=>{
+      const trimmed=line.trim();
+      if(!trimmed||trimmed.startsWith('#'))return;
+      const parts=trimmed.split('|').map(s=>s.trim()).filter(Boolean),kind=(parts[0]||'').toUpperCase();
+      if((kind==='FRENTE_CENTRO'&&parts.length===2)||(['SEPARAR','JUNTAR'].includes(kind)&&parts.length===3)){
+        rules.push({kind,names:parts.slice(1),line:idx+1});
+      }else errors.push('Línea '+(idx+1)+': formato desconocido.');
+    });
+    return {rules,errors};
+  }
+  function ruleStatus(textValue){
+    const {rules,errors}=parsedRules(textValue),active=[],missing=[];
+    rules.forEach(rule=>{
+      const matched=rule.names.map(studentMatch);
+      if(matched.some(n=>!n)){missing.push('Línea '+rule.line+': '+rule.names.filter((n,i)=>!matched[i]).join(' / '));return;}
+      if(new Set(matched).size!==matched.length){errors.push('Línea '+rule.line+': deben ser estudiantes distintos.');return;}
+      active.push({...rule,names:matched});
+    });
+    return {rules,errors,active,missing};
+  }
+  function updateTeacherStatus(){
+    const status=ruleStatus($('ruleInput').value);
+    const lines=[status.rules.length+' reglas escritas · '+status.active.length+' aplicables con la nómina actual.'];
+    if(status.missing.length)lines.push('Nombres sin coincidencia (estas reglas no se aplican hasta que aparezcan en la nómina):\n'+status.missing.join('\n'));
+    if(status.errors.length)lines.push('Revisa: '+status.errors.join(' '));
+    $('ruleFeedback').textContent=lines.join('\n\n');
+    $('ruleFeedback').style.color=status.errors.length?'#b42345':'#41536b';
+    return status;
+  }
+  function openTeacher(){
+    if($('configDialog').open)$('configDialog').close();
+    $('ruleInput').value=teacherRulesText;updateTeacherStatus();
+    if(!$('teacherDialog').open)$('teacherDialog').showModal();
+  }
+  function saveTeacher(){
+    const status=updateTeacherStatus();
+    if(status.errors.length){notify('Revisa el formato de las reglas.');return;}
+    teacherRulesText=$('ruleInput').value.trim();
+    try{localStorage.setItem(PRIVATE_RULES_KEY,teacherRulesText);}catch(e){notify('No se pudieron guardar las reglas en el navegador.');return;}
+    $('teacherDialog').close();
+    notify('Reglas docentes guardadas. No se mostrarán durante el sorteo.');
+  }
+  const POS=new Map();
+  ALL.forEach(id=>{
+    const [zone,nstr]=id.split('-'),n=Number(nstr)-1;
+    const specs=zone==='left'?{x:.02,w:.22,cols:2,rows:5,h:.78}:zone==='middle'?{x:.34,w:.34,cols:3,rows:7,h:.96}:{x:.76,w:.22,cols:2,rows:7,h:.96};
+    const row=Math.floor(n/specs.cols),col=n%specs.cols;
+    POS.set(id,{zone,row,col,x:specs.x+(col+.5)*specs.w/specs.cols,y:.02+(row+.5)*specs.h/specs.rows});
+  });
+  function near(a,b){
+    const x=POS.get(a),y=POS.get(b);
+    return x.zone===y.zone&&Math.abs(x.row-y.row)<=1&&Math.abs(x.col-y.col)<=1&&a!==b;
+  }
+  function far(a,b){
+    const x=POS.get(a),y=POS.get(b);
+    return x.zone!==y.zone&&Math.hypot(x.x-y.x,x.y-y.y)>=.53;
+  }
+  function meetsRule(rule,map){
+    if(rule.kind==='FRENTE_CENTRO'){
+      const sid=map[rule.names[0]];
+      return !sid||['middle-1','middle-2','middle-3'].includes(sid);
+    }
+    const a=map[rule.names[0]],b=map[rule.names[1]];
+    if(!a||!b)return true;
+    return rule.kind==='JUNTAR'?near(a,b):far(a,b);
+  }
+  function computeConstrainedSeats(){
+    const status=ruleStatus(teacherRulesText);
+    if(status.errors.length)throw Error('Hay reglas docentes con errores de formato.');
+    const rules=status.active;
+    const seatsAvailable=ALL.filter(id=>!state.locks.includes(id));
+    const occupied={};const taken=new Set();
+    ALL.forEach(sid=>{
+      if(state.locks.includes(sid)&&state.seats[sid]){occupied[state.seats[sid]]=sid;taken.add(sid);}
+    });
+    const names=new Set(state.students);
+    const involved=[...new Set(rules.flatMap(r=>r.names))].filter(n=>names.has(n)&&!occupied[n]);
+    // Resolver primero los dominios más restringidos y las parejas que deben sentarse juntas.
+    const priority=[];
+    function add(n){if(involved.includes(n)&&!priority.includes(n))priority.push(n);}
+    rules.filter(r=>r.kind==='FRENTE_CENTRO').forEach(r=>add(r.names[0]));
+    rules.filter(r=>r.kind==='JUNTAR').forEach(r=>r.names.forEach(add));
+    rules.filter(r=>r.kind==='SEPARAR').forEach(r=>r.names.forEach(add));
+    involved.forEach(add);
+    const mapping={...occupied};
+    if(!rules.every(r=>meetsRule(r,mapping)))throw Error('Los puestos fijados no cumplen las reglas docentes.');
+    const validOptions=name=>{
+      const available=seatsAvailable.filter(sid=>!taken.has(sid));
+      const relevant=rules.filter(r=>r.names.includes(name));
+      return shuffleArray(available).filter(sid=>{
+        mapping[name]=sid;
+        const valid=relevant.every(r=>meetsRule(r,mapping));
+        delete mapping[name];
+        return valid;
+      });
+    };
+    let steps=0;
+    function forwardPossible(){
+      for(const rule of rules){
+        if(rule.names.every(n=>mapping[n]))continue;
+        const pending=rule.names.filter(n=>!mapping[n]);
+        if(pending.length===1&&!validOptions(pending[0]).length)return false;
+      }
+      return true;
+    }
+    function solve(idx){
+      if(++steps>250000)return false;
+      if(idx>=priority.length)return rules.every(r=>meetsRule(r,mapping));
+      const name=priority[idx];
+      for(const sid of validOptions(name)){
+        mapping[name]=sid;taken.add(sid);
+        if(forwardPossible()&&solve(idx+1))return true;
+        taken.delete(sid);delete mapping[name];
+      }
+      return false;
+    }
+    if(!forwardPossible()||!solve(0))throw Error('No existe una distribución compatible con las reglas y puestos fijados.');
+    const result={};
+    for(const [name,sid] of Object.entries(mapping))result[sid]=name;
+    const assigned=new Set(Object.keys(mapping));
+    const remainingStudents=shuffleArray(state.students.filter(n=>!assigned.has(n)));
+    const remainingSeats=shuffleArray(ALL.filter(id=>!state.locks.includes(id)&&!taken.has(id)));
+    if(remainingStudents.length>remainingSeats.length)throw Error('No hay suficientes puestos libres.');
+    remainingStudents.forEach((name,i)=>result[remainingSeats[i]]=name);
+    return result;
+  }
   function randomize(){
     if(!state.students.length){openConfig();return;}
     clean();
-    const fixedSet=new Set(state.locks);
-    const fixedNames=new Set(ALL.filter(s=>fixedSet.has(s)&&state.seats[s]).map(s=>state.seats[s]));
-    const candidates=shuffleArray(state.students.filter(n=>!fixedNames.has(n)));
-    const seats=shuffleArray(ALL.filter(s=>!fixedSet.has(s)));
-    if(candidates.length>seats.length){notify('Hay más estudiantes que puestos disponibles. Libera algunos puestos.');return;}
-    snapshot();
-    const next={};
-    for(const sid of state.locks)if(state.seats[sid])next[sid]=state.seats[sid];
-    candidates.forEach((name,i)=>next[seats[i]]=name);
-    state.seats=next;store();flash=true;render();notify('¡Sorteo realizado! '+state.students.length+' estudiantes distribuidos.');
+    let next;
+    try{next=computeConstrainedSeats();}
+    catch(e){notify(e.message+' Revísalo en la configuración docente.');return;}
+    snapshot();state.seats=next;store();flash=true;render();
+    notify('¡Sorteo realizado! '+state.students.length+' estudiantes distribuidos.');
   }
   function assignManual(newName){
     if(!selected)return;
@@ -384,6 +561,17 @@ textarea.input{resize:vertical;min-height:210px;line-height:1.5}
   $('print').onclick=()=>window.print();
   $('export').onclick=exportCSV;
   document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'&&!$('configDialog').open){e.preventDefault();randomize();}});
+  $('closeTeacher').onclick=()=>$('teacherDialog').close();
+  $('saveRules').onclick=saveTeacher;
+  $('checkRules').onclick=updateTeacherStatus;
+  $('ruleInput').addEventListener('input',updateTeacherStatus);
+  document.addEventListener('keydown',e=>{
+    if(e.ctrlKey&&e.altKey&&e.code==='KeyM'){e.preventDefault();openTeacher();}
+  });
+  const logo=document.querySelector('.logo');
+  let pressTimeout;
+  logo.addEventListener('pointerdown',()=>{pressTimeout=setTimeout(openTeacher,1800);});
+  ['pointerup','pointerleave','pointercancel'].forEach(event=>logo.addEventListener(event,()=>clearTimeout(pressTimeout)));
   render();
   if(!state.students.length)openConfig();
 })();
