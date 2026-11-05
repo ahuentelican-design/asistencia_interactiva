@@ -74,9 +74,16 @@ h2{font-size:18px;letter-spacing:-.03em;margin:4px 0}
 .room.is-shuffling .desk:nth-child(4n+1){animation-delay:-.38s!important}
 .room.is-shuffling .desk.fixed{animation:seatHeartbeatFixed 1s ease-in-out infinite!important;z-index:1}
 .room.is-shuffling .desk:hover{transform:none}
+@keyframes nameReroll{
+  0%{opacity:.25;transform:translateY(-6px) scale(.91);filter:blur(1.5px)}
+  65%{opacity:1;transform:translateY(1px) scale(1.04);filter:blur(0)}
+  100%{opacity:1;transform:translateY(0) scale(1)}
+}
+.room.is-shuffling .desk .rolling-name{animation:nameReroll .28s ease-out both;will-change:transform,opacity}
+.room.is-shuffling .desk.fixed .rolling-name{animation:none}
 .confettiCanvas{position:absolute;inset:0;width:100%;height:100%;z-index:12;pointer-events:none}
 @media(prefers-reduced-motion:reduce){
-  .room.is-shuffling .desk,.room.is-shuffling .desk.fixed,.desk.flash{animation:none!important;transition:none!important}
+  .room.is-shuffling .desk,.room.is-shuffling .desk.fixed,.desk.flash,.room.is-shuffling .desk .rolling-name{animation:none!important;transition:none!important}
 }
 @media print{.confettiCanvas{display:none!important}}
 .label{display:block;font-size:clamp(7px,.75vw,10px);line-height:1.05;font-weight:950;overflow-wrap:anywhere;max-height:100%;overflow:hidden}
@@ -169,7 +176,7 @@ textarea.input{resize:vertical;min-height:210px;line-height:1.5}
           <button class="btn light" id="undo" disabled>↶ Deshacer</button>
           <button class="btn light" id="unlock">Quitar todos los fijos</button>
         </div>
-<p class="helper">Los nombres se mezclarán durante 5 segundos antes de revelar la distribución final. Los puestos fijados no cambian.</p>
+<p class="helper">Durante 10 segundos verás varias distribuciones, como si presionaras Aleatorizar repetidamente. Las restricciones y puestos fijos se respetan en cada cambio.</p>
       </section>
       <section class="card cardpad">
         <div class="eyebrow">Edición de puestos</div>
@@ -505,22 +512,21 @@ textarea.input{resize:vertical;min-height:210px;line-height:1.5}
     return result;
   }
 
-  const SHUFFLE_DURATION=5000;
+  const SHUFFLE_DURATION=10000;
   const prefersReducedMotion=()=>window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  // La vista previa solo cambia el texto que se ve; nunca modifica la distribución guardada.
-  function paintShufflePreview(variableNames,freeSeats){
-    const candidates=shuffleArray(variableNames);
-    const positions=shuffleArray(freeSeats);
-    const preview=new Map();
-    candidates.forEach((name,i)=>preview.set(positions[i],name));
-    freeSeats.forEach((sid)=>{
-      const d=deskNodes.get(sid),name=preview.get(sid)||'';
-      const label=d.firstElementChild;
-      if(!label)return;
-      label.className=name?'label':'num';
-      label.textContent=name?shortName(name):'•';
+  // Cada vista previa simula un nuevo sorteo y también cumple con las restricciones.
+  // Las distribuciones intermedias son solo visuales y no se guardan.
+  function paintShufflePreview(previewSeats){
+    ALL.forEach((sid,i)=>{
+      if(state.locks.includes(sid))return;
+      const d=deskNodes.get(sid),name=previewSeats[sid]||'';
+      const label=document.createElement('span');
+      label.className=(name?'label':'num')+' rolling-name';
+      label.textContent=name?shortName(name):String(i+1).padStart(2,'0');
+      d.replaceChildren(label);
       d.classList.toggle('occupied',Boolean(name));
       d.classList.toggle('empty',!name);
+      d.title=captionSeat(sid)+' — '+(name||'Vacío');
     });
   }
   // Confeti original de píxeles, con colores vivos y pequeñas monedas de estilo arcade.
@@ -585,9 +591,7 @@ textarea.input{resize:vertical;min-height:210px;line-height:1.5}
     try{next=computeConstrainedSeats();}
     catch(e){notify(e.message+' Revísalo en la configuración docente.');return;}
     const lockedNames=new Set(ALL.filter(sid=>state.locks.includes(sid)&&state.seats[sid]).map(sid=>state.seats[sid]));
-    const variableNames=state.students.filter(name=>!lockedNames.has(name));
-    const freeSeats=ALL.filter(sid=>!state.locks.includes(sid));
-    if(!variableNames.length){notify('Todos los estudiantes están fijados. Libera algún puesto para sortear.');return;}
+    if(state.students.every(name=>lockedNames.has(name))){notify('Todos los estudiantes están fijados. Libera algún puesto para sortear.');return;}
     selected=null;
     isShuffling=true;render();
     function finish(){
@@ -602,9 +606,12 @@ textarea.input{resize:vertical;min-height:210px;line-height:1.5}
       const elapsed=now-start;
       if(elapsed>=SHUFFLE_DURATION){finish();return;}
       const progress=elapsed/SHUFFLE_DURATION;
-      const interval=85+Math.pow(progress,3)*190;
+      // Sorteos completos sucesivos: rápidos al comienzo y gradualmente más pausados.
+      const interval=320+Math.pow(progress,2)*420;
       if(now-lastPreview>=interval){
-        paintShufflePreview(variableNames,freeSeats);lastPreview=now;
+        try{paintShufflePreview(computeConstrainedSeats());}
+        catch(e){/* No modificar la vista previa si falla un intento intermedio. */}
+        lastPreview=now;
       }
       const seconds=Math.ceil((SHUFFLE_DURATION-elapsed)/1000);
       if(seconds!==lastSecond){
